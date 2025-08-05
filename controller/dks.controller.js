@@ -1,36 +1,23 @@
 const FormData = require('form-data');
 const axios = require('axios');
 
- exports.getDKSToken =async function (req, res, callback) {
-    let authObj = req.body.authObj || {};
-    var authObjKeys=Object.keys(authObj) || [];
+ exports.getDKSServiceDtl =async function (req, res, callback) {
+    let serviceObj = req.body.serviceObj || {};
+    var serviceObjKeys=Object.keys(serviceObj) || [];
     let outJson = {};
-    console.log("authObj",authObj)
+    console.log("serviceObjKeys",serviceObjKeys)
 
-    if(authObjKeys.length > 0){
-        let token = '';
+    if(serviceObjKeys.length > 0){
         let methodParam = {};
-        methodParam["bodyParams"] = authObj["bodyParams"];
-        methodParam["service_url"] = authObj["url"];
-        let authResult = await execGetAxiOsRequestMethod(methodParam);
-        console.log("authResult",authResult);
-        if(authResult.status == 'SUCCESS'){
-            let tokenResult = authResult["result"] || {};
-            let tokenDetails = tokenResult["Details"][0] || {};
-            if(tokenDetails.status == true){
-                token = tokenDetails["token"] || '';
-            }
-            outJson["result"] = token;
-            outJson["status"] = "SUCCESS";
-            outJson["message"] = "SUCCESS";
-            callback(null,outJson);
-        } else {
-            callback(null,authResult);
-        }
-    } else if(authObjKeys.length == 0){
+        methodParam["bodyParams"] = serviceObj["bodyParams"];
+        methodParam["service_url"] = serviceObj["service_url"];
+        let dksResult = await execGetAxiOsRequestMethod(methodParam);
+        console.log("dksResult",dksResult);
+        callback(null,dksResult);
+    } else if(serviceObjKeys.length == 0){
         outJson["result"] = '';
         outJson["status"] = "FAIL";
-        outJson["message"] = "Please Verify authObj can not be blank!";
+        outJson["message"] = "Please Verify serviceObjKeys can not be blank!";
         callback(null,outJson);
     }
 }
