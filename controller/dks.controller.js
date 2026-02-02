@@ -49,6 +49,7 @@ exports.getDKSServiceDtl = async function (req, res, callback) {
       request_id: serviceObj.request_id || null,
       timeout_ms: serviceObj.timeout_ms || 60000,
       retry_429: serviceObj.retry_429 !== false,
+      headers: serviceObj.headers || {},
     };
 
     // DRY RUN MODE
@@ -91,6 +92,7 @@ async function getAxiOsRequestMethod(paramJson) {
   const payloadType = String(paramJson.payload_type || "json").toLowerCase();
   const bearerToken = paramJson.bearer_token || null;
   const clientRequestId = paramJson.request_id || makeRequestId();
+  const extraHeaders = paramJson.headers || {};
 
   const outJson = {};
   const baseHeaders = {
@@ -98,6 +100,7 @@ async function getAxiOsRequestMethod(paramJson) {
     "User-Agent":
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
     "X-Request-Id": clientRequestId,
+    ...extraHeaders,
   };
 
   if (bearerToken) {
