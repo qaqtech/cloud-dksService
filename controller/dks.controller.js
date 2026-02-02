@@ -97,19 +97,50 @@ async function getAxiOsRequestMethod(paramJson) {
   const payloadType = String(paramJson.payload_type || "json").toLowerCase();
   const bearerToken = paramJson.bearer_token || null;
   const clientRequestId = paramJson.request_id || makeRequestId();
-  const extraHeaders = paramJson.headers || {};
+  const extraHeadersRaw = paramJson.headers || {};
 
-  const outJson = {};
+  const toLowerKeys = (obj = {}) => {
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) {
+      out[String(k).toLowerCase()] = v;
+    }
+    return out;
+  };
+
+  const maskHeaders = (obj = {}) => {
+    const out = { ...obj };
+    const secretKeys = [
+      "authorization",
+      "x-integration-key",
+      "cookie",
+      "cf-access-client-secret",
+      "x-api-key",
+    ];
+    for (const k of Object.keys(out)) {
+      if (secretKeys.includes(String(k).toLowerCase())) out[k] = "****";
+    }
+    return out;
+  };
+
+  const isHtmlChallenge = (data) =>
+    typeof data === "string" &&
+    (data.includes("Just a moment") ||
+      data.includes("/cdn-cgi/challenge-platform") ||
+      data.includes("__cf_chl"));
+
+  // ---- normalize headers ----
+  const extraHeaders = toLowerKeys(extraHeadersRaw);
+
   const baseHeaders = {
-    Accept: "application/json",
-    "User-Agent":
+    accept: "application/json",
+    "user-agent":
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-    "X-Request-Id": clientRequestId,
+    "x-request-id": clientRequestId,
     ...extraHeaders,
   };
 
   if (bearerToken) {
-    baseHeaders.Authorization = `Bearer ${bearerToken}`;
+    baseHeaders["authorization"] = `Bearer ${bearerToken}`;
   }
 
   const httpsAgent = new https.Agent({
@@ -125,33 +156,57 @@ async function getAxiOsRequestMethod(paramJson) {
     validateStatus: (status) => status >= 200 && status < 300, // treat non-2xx as errors
   };
 
+  const outJson = {};
+
   try {
     const doRequest = async () => {
       if (payloadType === "json") {
-        return axios.post(service_url, bodyParams, {
-          ...axiosConfig,
-          headers: {
-            ...baseHeaders,
-            "Content-Type": "application/json",
-          },
-        });
+        const outgoingHeaders = {
+          ...baseHeaders,
+          "content-type": "application/json",
+        };
+
+        try {
+          return await axios.post(service_url, bodyParams, {
+            ...axiosConfig,
+            headers: outgoingHeaders,
+          });
+        } catch (err) {
+          const h = err?.response?.headers || {};
+          const data = err?.response?.data;
+          if (isHtmlChallenge(data)) {
+            console.log("[UPSTREAM ERROR] challenge snippet:", String(data).slice(0, 300));
+          }
+          throw err;
+        }
       }
 
       const form = new FormData();
-      for (const [k, v] of Object.entries(bodyParams)) {
+      for (const [k, v] of Object.entries(bodyParams || {})) {
         form.append(k, v);
       }
 
-      return axios.post(service_url, form, {
-        ...axiosConfig,
-        headers: {
-          ...baseHeaders,
-          ...form.getHeaders(),
-        },
-      });
+      const formHeaders = toLowerKeys(form.getHeaders());
+      const outgoingHeaders = {
+        ...baseHeaders,
+        ...formHeaders,
+      };
+
+      try {
+        return await axios.post(service_url, form, {
+          ...axiosConfig,
+          headers: outgoingHeaders,
+        });
+      } catch (err) {
+        const h = err?.response?.headers || {};
+        const data = err?.response?.data;
+        throw err;
+      }
     };
 
-    const response = paramJson.retry_429 ? await axiosPostWith429Retry(doRequest) : await doRequest();
+    const response = paramJson.retry_429
+      ? await axiosPostWith429Retry(doRequest)
+      : await doRequest();
 
     outJson.result = response.data;
     outJson.status = "SUCCESS";
@@ -182,7 +237,7 @@ async function getAxiOsRequestMethod(paramJson) {
         "content-type": headers["content-type"],
         date: headers["date"],
         "x-request-id": headers["x-request-id"],
-      }
+      },
     };
 
     outJson.error_code = data?.Details?.[0]?.error_code || null;
