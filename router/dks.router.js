@@ -18,4 +18,16 @@ router.post("/echo", (req, res) => {
   });
 });
 
+router.post("/mock/token", (req, res) => {
+  const { userid, password } = req.body || {};
+  if (!userid || !password) {
+    return res.status(422).json({
+      Details: [{ status: false, error_code: "ERR_VALIDATION_MISSING_FIELD", message: "userid/password required" }]
+    });
+  }
+  return res.json({
+    Details: [{ status: true, message: "Auth Token Generated (MOCK)", token: 123456 }]
+  });
+});
+
 module.exports = router;   

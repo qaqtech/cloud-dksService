@@ -1,75 +1,3 @@
-// const FormData = require('form-data');
-// const axios = require('axios');
-
-//  exports.getDKSServiceDtl =async function (req, res, callback) {
-//     let serviceObj = req.body.serviceObj || {};
-//     var serviceObjKeys=Object.keys(serviceObj) || [];
-//     let outJson = {};
-//     //console.log("serviceObjKeys",serviceObjKeys)
-
-//     if(serviceObjKeys.length > 0){
-//         let methodParam = {};
-//         methodParam["bodyParams"] = serviceObj["bodyParams"];
-//         methodParam["service_url"] = serviceObj["service_url"];
-//         let dksResult = await execGetAxiOsRequestMethod(methodParam);
-//         //console.log("dksResult",dksResult);
-//         callback(null,dksResult);
-//     } else if(serviceObjKeys.length == 0){
-//         outJson["result"] = '';
-//         outJson["status"] = "FAIL";
-//         outJson["message"] = "Please Verify serviceObjKeys can not be blank!";
-//         callback(null,outJson);
-//     }
-// }
-
-// function execGetAxiOsRequestMethod(methodParam) {
-//     return new Promise(function (resolve, reject) {
-//         getAxiOsRequestMethod( methodParam,  function (error, result) {
-//             if (error) {
-//                 reject(error);
-//             }
-//             resolve(result);
-//         });
-//     });
-// }
-
-// async function getAxiOsRequestMethod(paramJson, callback){
-//     let bodyParams = paramJson.bodyParams || {};
-//     let service_url = paramJson.service_url;
-//     let outJson = {};
-//     var bodyParamsKeys=Object.keys(bodyParams) || [];
-
-//     let form = new FormData();
-//     for(let i=0;i<bodyParamsKeys.length;i++){
-//         let key = bodyParamsKeys[i];
-//         let val = bodyParams[key];
-
-//         form.append(key, val);
-//     }
-//    //console.log("service_url",service_url);
-//    //console.log("bodyParams",bodyParams);
-//     //console.log("Form Data",form) 
-//     //const {data} = await Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36
-//     axios.post(service_url, form, {
-//         headers: {
-//             'Content-Type': `multipart/form-data`,
-//             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
-//             'secureProtocol': 'TLSv1_3_method'
-//         }
-//     }).then(function (response) {
-//         //console.log(response.data);
-//         outJson["result"] = response.data;   
-//         outJson["message"]="SUCCESS";
-//         outJson["status"]="SUCCESS";
-//         callback(null,outJson);   
-//     }).catch(function (error) {
-//         //console.log(error);
-//         outJson["message"]=error.message;
-//         outJson["status"]="FAIL";
-//         callback(null,outJson);   
-//     });
-// }
-
 const axios = require("axios");
 const FormData = require("form-data");
 const https = require("https");
@@ -122,6 +50,29 @@ exports.getDKSServiceDtl = async function (req, res, callback) {
       timeout_ms: serviceObj.timeout_ms || 60000,
       retry_429: serviceObj.retry_429 !== false,
     };
+
+    // DRY RUN MODE
+    const isDryRun = serviceObj.dry_run === true || serviceObj.dry_run === "true";
+    if (isDryRun) {
+      const safeBody = { ...(serviceObj.bodyParams || {}) };
+      if (safeBody.password) safeBody.password = "******";
+
+      return callback(null, {
+        status: "SUCCESS",
+        message: "DRY_RUN (no upstream call made)",
+        would_send: {
+          service_url: serviceObj.service_url,
+          payload_type: serviceObj.payload_type || "json",
+          headers: {
+            "Content-Type": String(serviceObj.payload_type || "json").toLowerCase() === "json"
+              ? "application/json"
+              : "multipart/form-data",
+            Accept: "application/json",
+          },
+          bodyParams: safeBody
+        }
+      });
+    }
 
     const dksResult = await getAxiOsRequestMethod(methodParam);
     return callback(null, dksResult);
@@ -208,15 +159,28 @@ async function getAxiOsRequestMethod(paramJson) {
   } catch (error) {
     const status = error?.response?.status || null;
     const data = error?.response?.data || null;
+    const headers = error?.response?.headers || {};
 
     outJson.status = "FAIL";
     outJson.http_status = status;
     outJson.result = data;
 
+    outJson.upstream = {
+      url: service_url,
+      payload_type: payloadType,
+      headers: {
+        server: headers["server"],
+        "cf-ray": headers["cf-ray"],
+        "content-type": headers["content-type"],
+        date: headers["date"],
+        "x-request-id": headers["x-request-id"],
+      }
+    };
+
     outJson.error_code = data?.Details?.[0]?.error_code || null;
     outJson.request_id =
       data?.Details?.[0]?.request_id ||
-      error?.response?.headers?.["x-request-id"] ||
+      headers?.["x-request-id"] ||
       clientRequestId;
 
     outJson.message =
