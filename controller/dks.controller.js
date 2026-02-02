@@ -58,6 +58,9 @@ exports.getDKSServiceDtl = async function (req, res, callback) {
       const safeBody = { ...(serviceObj.bodyParams || {}) };
       if (safeBody.password) safeBody.password = "******";
 
+      const safeHeaders = { ...(serviceObj.headers || {}) };
+      if (safeHeaders["x-integration-key"]) safeHeaders["x-integration-key"] = "******";
+
       return callback(null, {
         status: "SUCCESS",
         message: "DRY_RUN (no upstream call made)",
@@ -65,13 +68,15 @@ exports.getDKSServiceDtl = async function (req, res, callback) {
           service_url: serviceObj.service_url,
           payload_type: serviceObj.payload_type || "json",
           headers: {
-            "Content-Type": String(serviceObj.payload_type || "json").toLowerCase() === "json"
-              ? "application/json"
-              : "multipart/form-data",
+            ...safeHeaders,
             Accept: "application/json",
+            "Content-Type":
+              String(serviceObj.payload_type || "json").toLowerCase() === "json"
+                ? "application/json"
+                : "multipart/form-data",
           },
-          bodyParams: safeBody
-        }
+          bodyParams: safeBody,
+        },
       });
     }
 
